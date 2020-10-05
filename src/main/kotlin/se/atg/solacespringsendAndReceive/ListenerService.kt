@@ -15,7 +15,6 @@ class ListenerService {
         concurrency = "\${workqueue.listeners:4}"
     )
     fun onMessage(message: Message<String>): String {
-        Thread.sleep(200)
         return "replay to test: ${message.payload}"
     }
 
