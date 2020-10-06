@@ -1,21 +1,19 @@
 package se.atg.solacespringsendAndReceive
 
+import org.slf4j.LoggerFactory
 import org.springframework.jms.annotation.JmsListener
-import org.springframework.messaging.Message
+import org.springframework.stereotype.Component
 import org.springframework.stereotype.Service
-
-const val SOLACE_WORK_QUEUE = "core-betting-service.work"
+import org.springframework.util.ErrorHandler
 
 @Service
 class ListenerService {
+    @JmsListener(destination = "\${solace.work-queue}", concurrency = "\${solace.listener-threads}")
+    fun onMessage() = "pong"
+}
 
-    @JmsListener(
-        destination = SOLACE_WORK_QUEUE,
-        containerFactory = "listenerContainerFactory",
-        concurrency = "\${workqueue.listeners:4}"
-    )
-    fun onMessage(message: Message<String>): String {
-        return "replay to test: ${message.payload}"
-    }
-
+@Component
+class ListenerErrorHandler : ErrorHandler {
+    val logger = LoggerFactory.getLogger(WorkGenerator::class.java)!!
+    override fun handleError(throwable: Throwable) = logger.warn("Ignoring {}", throwable.toString())
 }

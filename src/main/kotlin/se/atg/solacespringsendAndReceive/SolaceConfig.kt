@@ -15,7 +15,6 @@ import org.springframework.jms.core.JmsTemplate
 import javax.jms.ConnectionFactory
 
 @Configuration
-@Profile("!activemq")
 @EnableConfigurationProperties(SolaceProperties::class)
 class SolaceConfig {
 
@@ -28,35 +27,30 @@ class SolaceConfig {
             password = config.password
             directTransport = false
             dmqEligible = true
-            connectTimeoutInMillis = config.connectTimeoutInMillis
-            connectRetries = config.connectRetries
-            connectRetriesPerHost = config.connectRetriesPerHost
-            reconnectRetryWaitInMillis = config.reconnectRetryWaitInMillis
         }
 
     @Bean
-    fun cachingConnectionFactory(
-        connectionFactory: ConnectionFactory,
-        config: SolaceProperties
-    ) = CachingConnectionFactory(connectionFactory)
-        .apply { sessionCacheSize = config.concurrency }
+    fun cachingConnectionFactory(connectionFactory: ConnectionFactory, config: SolaceProperties) =
+        CachingConnectionFactory(connectionFactory).apply {
+            sessionCacheSize = config.clientThreads
+        }
 
     @Bean
     fun jmsTemplate(cachingConnectionFactory: ConnectionFactory) =
-        JmsTemplate(cachingConnectionFactory)
-            .apply {
-                isExplicitQosEnabled = true
-                setReceiveTimeout(4000)
-                isPubSubDomain = false
-            }
+        JmsTemplate(cachingConnectionFactory).apply {
+            isExplicitQosEnabled = true
+            receiveTimeout = 4000
+            isPubSubDomain = false
+        }
 
     @Bean
-    fun listenerContainerFactory(connectionFactory: ConnectionFactory) = DefaultJmsListenerContainerFactory().apply {
-        setConnectionFactory(connectionFactory)
-        setSessionTransacted(true)
-        setPubSubDomain(false)
-        setTaskExecutor(SimpleAsyncTaskExecutor("JmsSolace-"))
-    }
+    fun jmsListenerContainerFactory(connectionFactory: ConnectionFactory, errorHandler: ListenerErrorHandler) =
+        DefaultJmsListenerContainerFactory().apply {
+            setConnectionFactory(connectionFactory)
+            setPubSubDomain(false)
+            setTaskExecutor(SimpleAsyncTaskExecutor("listener-"))
+            setErrorHandler(errorHandler)
+        }
 }
 
 
@@ -67,11 +61,7 @@ data class SolaceProperties(
     val vpn: String,
     val username: String,
     val password: String,
-    @Value("\${solace.concurrency.events}")
-    val concurrency: Int = 10,
-    val connectTimeoutInMillis: Int = 200,
-    val connectRetries: Int = -1,
-    val reconnectRetries: Int = -1,
-    val connectRetriesPerHost: Int = 0,
-    val reconnectRetryWaitInMillis: Int = 200
+    val clientThreads: Int = 10,
+    val listenerThreads: Int = 10,
+    val workQueue: String
 )
