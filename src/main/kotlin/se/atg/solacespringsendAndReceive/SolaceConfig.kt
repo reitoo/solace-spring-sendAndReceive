@@ -1,13 +1,12 @@
 package se.atg.solacespringsendAndReceive
 
+import com.solacesystems.jms.CustomSolConnectionFactory
 import com.solacesystems.jms.SolJmsUtility
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.boot.context.properties.ConstructorBinding
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
-import org.springframework.context.annotation.Profile
 import org.springframework.core.task.SimpleAsyncTaskExecutor
 import org.springframework.jms.config.DefaultJmsListenerContainerFactory
 import org.springframework.jms.connection.CachingConnectionFactory
@@ -20,7 +19,8 @@ class SolaceConfig {
 
     @Bean
     fun connectionFactory(config: SolaceProperties) =
-        SolJmsUtility.createConnectionFactory().apply {
+//        SolJmsUtility.createConnectionFactory().apply {
+        CustomSolConnectionFactory().apply {
             host = config.host
             vpn = config.vpn
             username = config.username
