@@ -1,13 +1,13 @@
 package se.atg.solacespringsendAndReceive
 
 import com.solacesystems.jms.SolJmsUtility
-import org.springframework.beans.factory.annotation.Value
+import org.springframework.beans.factory.config.ConfigurableBeanFactory.SCOPE_PROTOTYPE
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.boot.context.properties.ConstructorBinding
 import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
-import org.springframework.context.annotation.Profile
+import org.springframework.context.annotation.Scope
 import org.springframework.core.task.SimpleAsyncTaskExecutor
 import org.springframework.jms.config.DefaultJmsListenerContainerFactory
 import org.springframework.jms.connection.CachingConnectionFactory
@@ -29,13 +29,13 @@ class SolaceConfig {
             dmqEligible = true
         }
 
-    @Bean
+    @Bean @Scope(SCOPE_PROTOTYPE)
     fun cachingConnectionFactory(connectionFactory: ConnectionFactory, config: SolaceProperties) =
         CachingConnectionFactory(connectionFactory).apply {
             sessionCacheSize = config.clientThreads
         }
 
-    @Bean
+    @Bean @Scope(SCOPE_PROTOTYPE)
     fun jmsTemplate(cachingConnectionFactory: ConnectionFactory) =
         JmsTemplate(cachingConnectionFactory).apply {
             isExplicitQosEnabled = true

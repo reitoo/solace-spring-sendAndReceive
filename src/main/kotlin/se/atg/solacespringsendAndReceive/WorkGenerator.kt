@@ -1,6 +1,7 @@
 package se.atg.solacespringsendAndReceive
 
 import org.slf4j.LoggerFactory
+import org.springframework.beans.factory.ObjectFactory
 import org.springframework.boot.context.event.ApplicationStartedEvent
 import org.springframework.context.event.EventListener
 import org.springframework.jms.core.JmsTemplate
@@ -10,7 +11,7 @@ import kotlin.concurrent.fixedRateTimer
 import kotlin.concurrent.thread
 
 @Component
-class WorkGenerator(val jmsTemplate: JmsTemplate, val solaceProperties: SolaceProperties) {
+class WorkGenerator(val jmsTemplateSupplier: ObjectFactory<JmsTemplate>, val solaceProperties: SolaceProperties) {
 
     @EventListener
     fun run(e: ApplicationStartedEvent) {
@@ -20,6 +21,7 @@ class WorkGenerator(val jmsTemplate: JmsTemplate, val solaceProperties: SolacePr
         // Create threads sending requests and waiting for replies.
         for (num in 1..solaceProperties.clientThreads) {
             thread(start = true, name = "client-$num") {
+                val jmsTemplate = jmsTemplateSupplier.getObject()
                 while(true) {
                     jmsTemplate.sendAndReceive(solaceProperties.workQueue) { session -> session.createTextMessage("ping") }
                     requestCounter.incrementAndGet();
