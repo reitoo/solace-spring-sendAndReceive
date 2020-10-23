@@ -12,9 +12,7 @@ import org.springframework.jms.connection.CachingConnectionFactory
 import org.springframework.jms.core.JmsTemplate
 import org.springframework.jms.core.MessageCreator
 import org.springframework.jms.listener.DefaultMessageListenerContainer.CACHE_CONSUMER
-import org.springframework.jms.support.JmsUtils
-import org.springframework.stereotype.Component
-import org.springframework.util.Assert
+import java.util.UUID.randomUUID
 import java.util.concurrent.ConcurrentHashMap
 import javax.jms.*
 
@@ -58,39 +56,30 @@ class SolaceConfig {
         }
 }
 
-@Component
 class CustomJmsTemplate(connectionFactory: ConnectionFactory) : JmsTemplate(connectionFactory) {
-    init {
-        isExplicitQosEnabled = true
-        receiveTimeout = 4000
-        isPubSubDomain = false
-    }
-
-    val cache: MutableMap<Session, CachedStuff> = ConcurrentHashMap<Session, CachedStuff>()
+    private val cache: MutableMap<Session, CachedStuff> = ConcurrentHashMap<Session, CachedStuff>()
 
     override fun doSendAndReceive(
         session: Session,
         destination: Destination,
         messageCreator: MessageCreator
     ): Message? {
-        Assert.notNull(messageCreator, "MessageCreator must not be null")
-        var producer: MessageProducer? = null
-        return try {
-            val requestMessage = messageCreator.createMessage(session)
-            val (responseQueue, consumer) = cache.computeIfAbsent(session) {
-                val queue = session.createTemporaryQueue()
-                CachedStuff(queue, session.createConsumer(queue))
-            }
-            producer = session.createProducer(destination)
-            requestMessage.jmsReplyTo = responseQueue
-            if (logger.isDebugEnabled) {
-                logger.debug("Sending created message: $requestMessage")
-            }
-            doSend(producer, requestMessage)
-            receiveFromConsumer(consumer, receiveTimeout)
-        } finally {
-            JmsUtils.closeMessageProducer(producer)
+        val correlationId = randomUUID().toString()
+        val (replyQueue, consumer) = getQueueAndConsumer(session)
+
+        session.createProducer(destination).use { producer ->
+            doSend(producer, messageCreator.createMessage(session).apply {
+                jmsCorrelationID = correlationId
+                jmsReplyTo = replyQueue
+            })
         }
+        return generateSequence { receiveFromConsumer(consumer, receiveTimeout) }
+            .firstOrNull { it.jmsCorrelationID == correlationId }
+    }
+
+    private fun getQueueAndConsumer(session: Session): CachedStuff = cache.computeIfAbsent(session) {
+        val queue = session.createTemporaryQueue()
+        CachedStuff(queue, session.createConsumer(queue))
     }
 
     data class CachedStuff(val queue: Queue, val consumer: MessageConsumer)
