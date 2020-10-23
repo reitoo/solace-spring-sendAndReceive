@@ -45,9 +45,8 @@
 			<artifactId>javax.jms-api</artifactId>
 		</dependency>
 		<dependency>
-			<groupId>com.solacesystems</groupId>
-			<artifactId>sol-jms</artifactId>
-			<version>10.9.1</version>
+			<groupId>org.springframework.boot</groupId>
+			<artifactId>spring-boot-starter-activemq</artifactId>
 		</dependency>
 
 		<dependency>

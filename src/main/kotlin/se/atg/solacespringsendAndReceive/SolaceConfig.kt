@@ -1,6 +1,8 @@
 package se.atg.solacespringsendAndReceive
 
-import com.solacesystems.jms.SolJmsUtility
+import org.apache.activemq.broker.BrokerPlugin
+import org.apache.activemq.broker.BrokerService
+import org.apache.activemq.broker.util.DestinationPathSeparatorBroker
 import org.springframework.boot.context.properties.ConfigurationProperties
 import org.springframework.boot.context.properties.ConstructorBinding
 import org.springframework.boot.context.properties.EnableConfigurationProperties
@@ -8,7 +10,6 @@ import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
 import org.springframework.core.task.SimpleAsyncTaskExecutor
 import org.springframework.jms.config.DefaultJmsListenerContainerFactory
-import org.springframework.jms.connection.CachingConnectionFactory
 import org.springframework.jms.core.JmsTemplate
 import org.springframework.jms.listener.DefaultMessageListenerContainer.CACHE_CONSUMER
 import javax.jms.ConnectionFactory
@@ -18,25 +19,18 @@ import javax.jms.ConnectionFactory
 class SolaceConfig {
 
     @Bean
-    fun connectionFactory(config: SolaceProperties) =
-        SolJmsUtility.createConnectionFactory().apply {
-            host = config.host
-            vpn = config.vpn
-            username = config.username
-            password = config.password
-            directTransport = false
-            dmqEligible = true
-        }
+    fun broker(): BrokerService {
+        val broker = BrokerService()
+        broker.isPersistent = false
+        broker.plugins = arrayOf<BrokerPlugin>(DestinationPathSeparatorBroker())
+        broker.addConnector("tcp://localhost:61616")
+        broker.isUseJmx = false
+        return broker
+    }
 
     @Bean
-    fun cachingConnectionFactory(connectionFactory: ConnectionFactory, config: SolaceProperties) =
-        CachingConnectionFactory(connectionFactory).apply {
-            sessionCacheSize = config.clientThreads
-        }
-
-    @Bean
-    fun jmsTemplate(cachingConnectionFactory: ConnectionFactory) =
-        JmsTemplate(cachingConnectionFactory).apply {
+    fun jmsTemplate(connectionFactory: ConnectionFactory) =
+        JmsTemplate(connectionFactory).apply {
             isExplicitQosEnabled = true
             receiveTimeout = 4000
             isPubSubDomain = false
