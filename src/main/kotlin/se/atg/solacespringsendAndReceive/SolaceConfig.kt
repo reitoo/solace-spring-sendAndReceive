@@ -10,8 +10,13 @@ import org.springframework.core.task.SimpleAsyncTaskExecutor
 import org.springframework.jms.config.DefaultJmsListenerContainerFactory
 import org.springframework.jms.connection.CachingConnectionFactory
 import org.springframework.jms.core.JmsTemplate
+import org.springframework.jms.core.MessageCreator
 import org.springframework.jms.listener.DefaultMessageListenerContainer.CACHE_CONSUMER
-import javax.jms.ConnectionFactory
+import org.springframework.jms.support.JmsUtils
+import org.springframework.stereotype.Component
+import org.springframework.util.Assert
+import java.util.concurrent.ConcurrentHashMap
+import javax.jms.*
 
 @Configuration
 @EnableConfigurationProperties(SolaceProperties::class)
@@ -36,7 +41,7 @@ class SolaceConfig {
 
     @Bean
     fun jmsTemplate(cachingConnectionFactory: ConnectionFactory) =
-        JmsTemplate(cachingConnectionFactory).apply {
+        CustomJmsTemplate(cachingConnectionFactory).apply {
             isExplicitQosEnabled = true
             receiveTimeout = 4000
             isPubSubDomain = false
@@ -51,6 +56,44 @@ class SolaceConfig {
             setErrorHandler(errorHandler)
             setCacheLevel(CACHE_CONSUMER)
         }
+}
+
+@Component
+class CustomJmsTemplate(connectionFactory: ConnectionFactory) : JmsTemplate(connectionFactory) {
+    init {
+        isExplicitQosEnabled = true
+        receiveTimeout = 4000
+        isPubSubDomain = false
+    }
+
+    val cache: MutableMap<Session, CachedStuff> = ConcurrentHashMap<Session, CachedStuff>()
+
+    override fun doSendAndReceive(
+        session: Session,
+        destination: Destination,
+        messageCreator: MessageCreator
+    ): Message? {
+        Assert.notNull(messageCreator, "MessageCreator must not be null")
+        var producer: MessageProducer? = null
+        return try {
+            val requestMessage = messageCreator.createMessage(session)
+            val (responseQueue, consumer) = cache.computeIfAbsent(session) {
+                val queue = session.createTemporaryQueue()
+                CachedStuff(queue, session.createConsumer(queue))
+            }
+            producer = session.createProducer(destination)
+            requestMessage.jmsReplyTo = responseQueue
+            if (logger.isDebugEnabled) {
+                logger.debug("Sending created message: $requestMessage")
+            }
+            doSend(producer, requestMessage)
+            receiveFromConsumer(consumer, receiveTimeout)
+        } finally {
+            JmsUtils.closeMessageProducer(producer)
+        }
+    }
+
+    data class CachedStuff(val queue: Queue, val consumer: MessageConsumer)
 }
 
 
