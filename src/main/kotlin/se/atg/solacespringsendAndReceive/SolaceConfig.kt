@@ -9,11 +9,7 @@ import org.springframework.context.annotation.Configuration
 import org.springframework.core.task.SimpleAsyncTaskExecutor
 import org.springframework.jms.config.DefaultJmsListenerContainerFactory
 import org.springframework.jms.connection.CachingConnectionFactory
-import org.springframework.jms.core.JmsTemplate
-import org.springframework.jms.core.MessageCreator
 import org.springframework.jms.listener.DefaultMessageListenerContainer.CACHE_CONSUMER
-import java.util.UUID.randomUUID
-import java.util.concurrent.ConcurrentHashMap
 import javax.jms.*
 
 @Configuration
@@ -21,7 +17,7 @@ import javax.jms.*
 class SolaceConfig {
 
     @Bean
-    fun connectionFactory(config: SolaceProperties) =
+    fun connectionFactory(config: SolaceProperties): ConnectionFactory =
         SolJmsUtility.createConnectionFactory().apply {
             host = config.host
             vpn = config.vpn
@@ -39,7 +35,7 @@ class SolaceConfig {
 
     @Bean
     fun jmsTemplate(cachingConnectionFactory: ConnectionFactory) =
-        CustomJmsTemplate(cachingConnectionFactory).apply {
+        SolaceJmsTemplate(cachingConnectionFactory).apply {
             isExplicitQosEnabled = true
             receiveTimeout = 4000
             isPubSubDomain = false
@@ -55,36 +51,6 @@ class SolaceConfig {
             setCacheLevel(CACHE_CONSUMER)
         }
 }
-
-class CustomJmsTemplate(connectionFactory: ConnectionFactory) : JmsTemplate(connectionFactory) {
-    private val cache: MutableMap<Session, CachedStuff> = ConcurrentHashMap<Session, CachedStuff>()
-
-    override fun doSendAndReceive(
-        session: Session,
-        destination: Destination,
-        messageCreator: MessageCreator
-    ): Message? {
-        val correlationId = randomUUID().toString()
-        val (replyQueue, consumer) = getQueueAndConsumer(session)
-
-        session.createProducer(destination).use { producer ->
-            doSend(producer, messageCreator.createMessage(session).apply {
-                jmsCorrelationID = correlationId
-                jmsReplyTo = replyQueue
-            })
-        }
-        return generateSequence { receiveFromConsumer(consumer, receiveTimeout) }
-            .firstOrNull { it.jmsCorrelationID == correlationId }
-    }
-
-    private fun getQueueAndConsumer(session: Session): CachedStuff = cache.computeIfAbsent(session) {
-        val queue = session.createTemporaryQueue()
-        CachedStuff(queue, session.createConsumer(queue))
-    }
-
-    data class CachedStuff(val queue: Queue, val consumer: MessageConsumer)
-}
-
 
 @ConstructorBinding
 @ConfigurationProperties("solace")
